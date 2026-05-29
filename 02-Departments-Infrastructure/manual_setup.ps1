@@ -16,16 +16,13 @@ while ( -not ($GroupsList -contains $GroupName)) {
 
 echo "Provided group is on a list. Creating Folder for a group..."
 
-### Tworzenie Folderów ###
-# The location under which I executed the commands was: 
-# [OldCampServer]: PS C:\
-New-Item -Path . -Name "Departments" -ItemType Directory
-New-Item -Path . -Name "Shadows" -ItemType Directory
-
-# Current location:
-# [OldCampServer]: PS C:\Departments\Shadows
-
-New-Item -Type "File" -Name "AdminNote.txt"
+### Tworzenie Folderów i Plików###
+if (-not(Test-Path "C:\Departments")) {
+    New-Item -Path "C:\" -Name "Departments" -ItemType Directory }
+if (-not(Test-Path "C:\Departments\$GroupName")) {
+    New-Item -Path "C:\Departments\" -Name "$GroupName" -ItemType Directory }
+if (-not(Test-Path "C:\Departments\$GroupName\AdminNote.txt")) {
+    New-Item -Path "C:\Departments\$GroupName\" -Type "File" -Name "AdminNote.txt" }
 
 ### Protokół NTFS ###
 # 1.Pobieramy ACL dla folderu 'Shadows'
