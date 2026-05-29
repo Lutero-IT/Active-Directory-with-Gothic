@@ -25,29 +25,40 @@ if (-not(Test-Path "C:\Departments\$GroupName\AdminNote.txt")) {
     New-Item -Path "C:\Departments\$GroupName\" -Type "File" -Name "AdminNote.txt" }
 
 ### Protokół NTFS ###
-# 1.Pobieramy ACL dla folderu 'Shadows'
-$Acl = Get-Acl -Path "C:\Departments\Shadows"
+# 1.Tworzymy CZYSTY ACL dla folderu '$GroupName'
+$Acl = New-Object System.Security.AccessControl.DirectorySecurity
 
 # 2.Blokujemy dziedziczenie na zmiennej $Acl, żeby móc je edytować
-$Acl.SetAccessRuleProtection($true, $true)
+$Acl.SetAccessRuleProtection($true, $false)
 
-# 3. Usuwamy groups and users ze zmiennej $Acl, które nie są uprawnione do przeglądania folderu.
-$RulesToRemove = $Acl.Access | Where-Object { $_.IdentityReference -eq "BUILTIN\Users" }
-foreach ($Rule in $RulesToRemove) {
-    $Acl.RemoveAccessRule($Rule)
-}
+# 3. Tworzymy reguły ACE dla odpowiednich grup i użytkowników i dodajemy je do zapisanego ACL
+$SystemAce = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    "NT AUTHORITY\SYSTEM",
+    "FullControl",
+    "ContainerInherit, ObjectInherit",
+    "None",
+    "Allow"
+)
+$Acl.AddAccessRule($SystemAce)
+$AdminAce = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    "BUILTIN\Administrators",
+    "FullControl",
+    "ContainerInherit, ObjectInherit",
+    "None",
+    "Allow"
+)
+$Acl.AddAccessRule($AdminAce)
+$DepartmentAce = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    "OLDCAMP\$GroupName",
+    "Modify",
+    "ContainerInherit, ObjectInherit",
+    "None",
+    "Allow"
+)
+$Acl.AddAccessRule($DepartmentAce)
 
-# 4. Tworzymy regułę ACE i dodajemy ją do zapisanego ACL
-$Identity = "oldcamp\Shadows"
-$Rights = "Modify"
-$Inheritance = "ContainerInherit, ObjectInherit"
-$Propagation = "None"
-$Type = "Allow"
-$Ace = New-Object System.Security.AccessControl.FileSystemAccessRule($Identity, $Rights, $Inheritance, $Propagation, $Type)
-$Acl.AddAccessRule($Ace)
-
-# 5.Ustawiamy nową, zmodyfikowaną regułę ACL dla folderu 'Shadows' ( protokół NTFS zakończony)
-Set-Acl -Path "C:\Departments\Shadows" -AclObject $Acl
+# 5.Ustawiamy nową, zmodyfikowaną regułę ACL dla folderu '$GroupName' ( protokół NTFS zakończony)
+Set-Acl -Path "C:\Departments\$GroupName" -AclObject $Acl
 
 ### Protokół SmbShare ###
 New-SmbShare `
