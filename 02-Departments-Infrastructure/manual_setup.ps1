@@ -61,14 +61,18 @@ $Acl.AddAccessRule($DepartmentAce)
 Set-Acl -Path "C:\Departments\$GroupName" -AclObject $Acl
 
 ### Protokół SmbShare ###
+if (-not (Get-SmbShare -Name "$GroupName-Share" -ErrorAction SilentlyContinue)) {
 New-SmbShare `
--Name "Shadows-Share"  `
--Path "C:\Departments\Shadows"  `
+-Name "$GroupName-Share"  `
+-Path "C:\Departments\$GroupName"  `
 -FullAccess "Authenticated Users" `
 -FolderEnumerationMode 'AccessBased' `
 -EncryptData $true `
 -CachingMode None
+}
 
 # Po ustawieniu protokołów SbmShare i NTFS, sprawdzić listę dostepu za pomocą komend:
-# dla SMB: Get-SmbShareAccess -Name "Shadows-Share" @@@ dla NTFS: $Acl.Access | Format-Table IdentityReference
+# dla SMB: Get-SmbShareAccess -Name "$GroupName-Share" @@@ dla NTFS: $Acl.Access | Format-Table IdentityReference
 
+
+### DRIVE-MAPPING, czyli ustawianie udostepnionych Folderów jako Dysków ###
