@@ -108,7 +108,7 @@ Write-Host "Setting SmbShare finished"
 $CanonName = (Get-ADGroup $GroupName -Properties CanonicalName).CanonicalName
 $DomainFQDN = $CanonName.Split('/')[0]
 $GPOName = "GPP_U_DriveMap_$GroupName"
-$TargetOU = "OU=User Groups,OU=Groups,OU=Camp,DC=oldcamp,DC=gothic,DC=inc"
+$TargetOU = "OU=Camp,DC=oldcamp,DC=gothic,DC=inc"
 
 ### Tworzenie GPO i podpięcię go do folderu Działu ###
 
@@ -132,3 +132,71 @@ New-GPLink `
 -Domain $DomainFQDN `
 -Target $TargetOU
 Write-Host "$GPOName linked to: $TargetOU"
+
+
+
+
+### Filtrowanie użytkowników dla GPO ###
+Write-Host "Applying Security Filtering for group: $GroupName..."
+Set-GPPermissions -Name $GPOName -Domain $DomainFQDN -PermissionLevel GpoRead -TargetName "Authenticated Users" -TargetType User
+Set-GPPermissions -Name $GPOName -Domain $DomainFQDN -PermissionLevel GpoApply -TargetName "OLDCAMP\$GroupName" -TargetType Group
+
+Write-Host "Security Filtering configured successfully! Only members of $GroupName will get the drive." -ForegroundColor Green
+### PROBLEM: There is some problem with filtering that I cannot resolve. The Drive for a Department doesn't appear under 'This PC'
+
+
+
+
+### Tworzę strukturę subfolderów preferencji dysku / Group Policy Preferences Structure ###
+
+$GpoID = ((Get-GPO $GPOName -Domain $DomainFQDN).Id).ToString()
+Write-Host "### Checking if GPP Structure exists in database ###"
+if ( -not (Test-Path -Path "C:\Windows\SYSVOL\domain\Policies\{$GpoID}\User\Preferences\Drives" )) {
+    Write-Host "GPP Structure doesn't exist. Creating folders..."
+
+    New-Item -Path "C:\Windows\SYSVOL\domain\Policies\{$GpoID}\User" -Name "Preferences" -ItemType Directory
+    Write-Host "Folder C:\Windows\SYSVOL\domain\Policies\{$GpoID}\User\Preferences created..."
+
+    New-Item -Path "C:\Windows\SYSVOL\domain\Policies\{$GpoID}\User\Preferences" -Name "Drives" -ItemType Directory
+    Write-Host "Folder C:\Windows\SYSVOL\domain\Policies\{$GpoID}\User\Preferences\Drives created..."
+
+    Write-Host "GPP Structure creation finished"
+}
+
+### Tworzenie Dysku z XML ###
+
+### Parametry dla XML ###
+Write-Host "Creating GUID for your XML rule..."
+$DriveGUID = [guid]::NewGuid().ToString("B").ToUpper()
+Write-Host "Your XML rule GUID is: $DriveGUID"
+$DriveLetter = $GroupName.Substring(0,1)
+Write-Host "Your Drive Letter is: $DriveLetter"
+$XMLDate = Get-Date -Format "yyyy/MM/dd HH:mm:ss"
+
+$XmlRule = @"
+<DriveSettings clsid="{30656CD2-F0E2-467c-9A70-07A547DA334D}">
+  <Drive clsid="{935D1B74-9F40-4e11-B169-ABF1B9C5D627}" 
+         name="${DriveLetter}:"
+         status="${DriveLetter}:" 
+         image="1" 
+         changed="$XMLDate"
+         uid="$DriveGUID">
+    <Properties action="U" 
+                cletter="$DriveLetter" 
+                hl="0" 
+                label="$SmbName"
+                path="\\OldCampServer\$SmbName"
+                persistent="1" 
+                username="" 
+                useLetter="1"/>
+  </Drive>
+</DriveSettings>
+"@
+
+### Tworzenie pliku Drives.xml w folderze SYSVOL ###
+$TargetPath = "C:\Windows\SYSVOL\domain\Policies\{$GpoID}\User\Preferences\Drives\Drives.xml"
+Set-Content -Path $TargetPath -Value $XmlRule
+Write-Host "XML Object with GUID $DriveGUID created under path: $TargetPath" -ForegroundColor Green
+
+### Aktualizujemy wersję polisy GPO w Rejestrze Systemu!!! ###
+Set-GPRegistryValue -Name $GPOName -Domain $DomainFQDN -Key "HKCU\Software\Policies" -ValueName "Version" -Type DWord -Value 1
